@@ -9,7 +9,6 @@ import torch
 import torch.nn as nn
 import torch.optim
 from torch.utils.data import DataLoader
-from torch.autograd import Variable
 import numpy as np
 from progress.bar import Bar
 import pandas as pd
@@ -65,30 +64,10 @@ def main(opt):
 
     # data loading
     print(">>> loading data")
-    # train_dataset = H36motion(path_to_data=opt.data_dir, actions='all', input_n=input_n, output_n=output_n,
-    #                           split=0, sample_rate=sample_rate, dct_n=dct_n)
-    # data_std = train_dataset.data_std
-    # data_mean = train_dataset.data_mean
     dim_used = [6, 7, 8, 9, 12, 13, 14, 15, 21, 22, 23, 24, 27, 28, 29, 30, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
                 47, 51, 52, 53, 54, 55, 56, 57, 60, 61, 62, 75, 76, 77, 78, 79, 80, 81, 84, 85, 86]
-    # val_dataset = H36motion(path_to_data=opt.data_dir, actions='all', input_n=input_n, output_n=output_n,
-    #                         split=2, sample_rate=sample_rate, data_mean=data_mean, data_std=data_std, dct_n=dct_n)
 
-    # # load dadasets for training
-    # train_loader = DataLoader(
-    #     dataset=train_dataset,
-    #     batch_size=opt.train_batch,
-    #     shuffle=True,
-    #     num_workers=opt.job,
-    #     pin_memory=True)
-    # val_loader = DataLoader(
-    #     dataset=val_dataset,
-    #     batch_size=opt.test_batch,
-    #     shuffle=False,
-    #     num_workers=opt.job,
-    #     pin_memory=True)
-
-    acts = data_utils.define_actions('all')
+    acts = data_utils.define_actions('walking')
     test_data = dict()
     for act in acts:
         test_dataset = H36motion(path_to_data=opt.data_dir, actions=act, input_n=input_n, output_n=output_n, split=1,
@@ -100,29 +79,8 @@ def main(opt):
             num_workers=opt.job,
             pin_memory=True)
     print(">>> data loaded !")
-    # print(">>> train data {}".format(train_dataset.__len__()))
-    # print(">>> validation data {}".format(val_dataset.__len__()))
-
-    # for epoch in range(start_epoch, opt.epochs):
-    #
-    #     if (epoch + 1) % opt.lr_decay == 0:
-    #         lr_now = utils.lr_decay(optimizer, lr_now, opt.lr_gamma)
-    #     print('==========================')
-    #     print('>>> epoch: {} | lr: {:.5f}'.format(epoch + 1, lr_now))
     ret_log = np.array([start_epoch])
     head = np.array(['epoch'])
-    # per epoch
-    # lr_now, t_l, t_e, t_3d = train(train_loader, model, optimizer, input_n=input_n,
-    #                                lr_now=lr_now, max_norm=opt.max_norm, is_cuda=is_cuda,
-    #                                dim_used=train_dataset.dim_used, dct_n=dct_n)
-    # ret_log = np.append(ret_log, [lr_now, t_l, t_e, t_3d])
-    # head = np.append(head, ['lr', 't_l', 't_e', 't_3d'])
-    #
-    # v_e, v_3d = val(val_loader, model, input_n=input_n, is_cuda=is_cuda, dim_used=train_dataset.dim_used,
-    #                 dct_n=dct_n)
-    #
-    # ret_log = np.append(ret_log, [v_e, v_3d])
-    # head = np.append(head, ['v_e', 'v_3d'])
 
     test_3d_temp = np.array([])
     test_3d_head = np.array([])
@@ -143,25 +101,9 @@ def main(opt):
 
     # update log file and save checkpoint
     df = pd.DataFrame(np.expand_dims(ret_log, axis=0))
-    # if epoch == start_epoch:
+    df.columns = head
+    print(df)
     df.to_csv(opt.ckpt + '/' + script_name + '.csv', header=head, index=False)
-    # else:
-    #     with open(opt.ckpt + '/' + script_name + '.csv', 'a') as f:
-    #         df.to_csv(f, header=False, index=False)
-    # if not np.isnan(v_e):
-    #     is_best = v_e < err_best
-    #     err_best = min(v_e, err_best)
-    # else:
-    #     is_best = False
-    # file_name = ['ckpt_' + script_name + '_best.pth.tar', 'ckpt_' + script_name + '_last.pth.tar']
-    # utils.save_ckpt({'epoch': epoch + 1,
-    #                  'lr': lr_now,
-    #                  'err': test_e[0],
-    #                  'state_dict': model.state_dict(),
-    #                  'optimizer': optimizer.state_dict()},
-    #                 ckpt_path=opt.ckpt,
-    #                 is_best=is_best,
-    #                 file_name=file_name)
 
 
 def train(train_loader, model, optimizer, input_n=20, dct_n=20, lr_now=None, max_norm=True, is_cuda=False, dim_used=[]):
@@ -181,9 +123,9 @@ def train(train_loader, model, optimizer, input_n=20, dct_n=20, lr_now=None, max
 
         bt = time.time()
         if is_cuda:
-            inputs = Variable(inputs.cuda()).float()
+            inputs = inputs.cuda().float()
             # targets = Variable(targets.cuda(async=True)).float()
-            all_seq = Variable(all_seq.cuda(async=True)).float()
+            all_seq = all_seq.cuda().float()
 
         outputs = model(inputs)
         n = outputs.shape[0]
@@ -236,9 +178,9 @@ def test(train_loader, model, input_n=20, output_n=50, dct_n=20, is_cuda=False, 
         bt = time.time()
 
         if is_cuda:
-            inputs = Variable(inputs.cuda()).float()
+            inputs = inputs.cuda().float()
             # targets = Variable(targets.cuda(async=True)).float()
-            all_seq = Variable(all_seq.cuda(async=True)).float()
+            all_seq = all_seq.cuda().float()
 
         outputs = model(inputs)
         n = outputs.shape[0]
@@ -252,7 +194,7 @@ def test(train_loader, model, input_n=20, output_n=50, dct_n=20, is_cuda=False, 
 
         # inverse dct transformation
         _, idct_m = data_utils.get_dct_matrix(seq_len)
-        idct_m = Variable(torch.from_numpy(idct_m)).float().cuda()
+        idct_m = torch.from_numpy(idct_m).float().cuda()
         outputs_t = outputs.view(-1, dct_n).transpose(0, 1)
         outputs_exp = torch.matmul(idct_m[:, :dct_n], outputs_t).transpose(0, 1).contiguous().view(-1, dim_used_len,
                                                                                                    seq_len).transpose(1,
@@ -282,10 +224,10 @@ def test(train_loader, model, input_n=20, output_n=50, dct_n=20, is_cuda=False, 
         # update loss and testing errors
         for k in np.arange(0, len(eval_frame)):
             j = eval_frame[k]
-            t_e[k] += torch.mean(torch.norm(pred_eul[:, j, :] - targ_eul[:, j, :], 2, 1)).cpu().data.numpy()[0] * n
+            t_e[k] += torch.mean(torch.norm(pred_eul[:, j, :] - targ_eul[:, j, :], 2, 1)).cpu().data.numpy() * n
             t_3d[k] += torch.mean(torch.norm(
                 targ_p3d[:, j, :, :].contiguous().view(-1, 3) - pred_p3d[:, j, :, :].contiguous().view(-1, 3), 2,
-                1)).cpu().data.numpy()[0] * n
+                1)).cpu().data.numpy() * n
         # t_l += loss.cpu().data.numpy()[0] * n
         N += n
 
@@ -308,9 +250,9 @@ def val(train_loader, model, input_n=20, dct_n=20, is_cuda=False, dim_used=[]):
         bt = time.time()
 
         if is_cuda:
-            inputs = Variable(inputs.cuda()).float()
+            inputs = inputs.cuda().float()
             # targets = Variable(targets.cuda(async=True)).float()
-            all_seq = Variable(all_seq.cuda(async=True)).float()
+            all_seq = all_seq.cuda().float()
 
         outputs = model(inputs)
         n = outputs.shape[0]

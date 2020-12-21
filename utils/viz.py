@@ -8,7 +8,8 @@ import numpy as np
 import h5py
 import os
 from mpl_toolkits.mplot3d import Axes3D
-from utils import forward_kinematics as fk
+import forward_kinematics as fk
+from h36motion import H36motion
 
 
 class Ax3DPose(object):
@@ -107,29 +108,25 @@ class Ax3DPose(object):
         self.ax.set_xlim3d([-r + xroot, r + xroot])
         self.ax.set_zlim3d([-r + zroot, r + zroot])
         self.ax.set_ylim3d([-r + yroot, r + yroot])
-        self.ax.set_aspect('equal')
+        #self.ax.set_aspect('equal')
 
 
-def plot_predictions(expmap_gt, expmap_pred, fig, ax, f_title):
-    # Load all the data
-    parent, offset, rotInd, expmapInd = fk._some_variables()
+def plot_predictions(gt, pred, fig, ax, f_title, is_3d=False):
+    nframes_pred = pred.shape[0]
 
-    nframes_pred = expmap_pred.shape[0]
+    if not is_3d:
+        gt = H36motion.expmap2xyz(gt)
+        pred = H36motion.expmap2xyz(pred)
 
-    # Compute 3d points for each frame
-    xyz_gt = np.zeros((nframes_pred, 96))
-    for i in range(nframes_pred):
-        xyz_gt[i, :] = fk.fkl(expmap_gt[i, :], parent, offset, rotInd, expmapInd).reshape([96])
-    xyz_pred = np.zeros((nframes_pred, 96))
-    for i in range(nframes_pred):
-        xyz_pred[i, :] = fk.fkl(expmap_pred[i, :], parent, offset, rotInd, expmapInd).reshape([96])
+    gt = gt.reshape(-1,96).numpy()
+    pred = pred.reshape(-1,96).numpy()
 
     # === Plot and animate ===
     ob = Ax3DPose(ax)
     # Plot the prediction
     for i in range(nframes_pred):
 
-        ob.update(xyz_gt[i, :], xyz_pred[i, :])
+        ob.update(gt[i, :], pred[i, :])
         ax.set_title(f_title + ' frame:{:d}'.format(i + 1), loc="left")
         plt.show(block=False)
 

@@ -36,7 +36,7 @@ def main(opt):
                         num_stage=opt.num_stage, node_n=48)
     if is_cuda:
         model.cuda()
-    model_path_len = './checkpoint/pretrained/h36m_in10_out25.pth.tar'
+    model_path_len = 'checkpoint/pretrained/h36m_in10_out25_dctn35.pth.tar'
     print(">>> loading ckpt len from '{}'".format(model_path_len))
     if is_cuda:
         ckpt = torch.load(model_path_len)
@@ -53,7 +53,7 @@ def main(opt):
     test_data = dict()
     for act in acts:
         test_dataset = H36motion(path_to_data=opt.data_dir, actions=act, input_n=input_n, output_n=output_n, split=1,
-                                 sample_rate=sample_rate)
+                                 sample_rate=sample_rate, dct_n=opt.dct_n)
         test_data[act] = DataLoader(
             dataset=test_dataset,
             batch_size=opt.test_batch,

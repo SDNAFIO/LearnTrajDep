@@ -5,7 +5,7 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import torch
 from torch.autograd.variable import Variable
 import os
-from utils import forward_kinematics
+import forward_kinematics
 
 
 def rotmat2euler(R):
@@ -568,7 +568,7 @@ def expmap2rotmat_torch(r):
     r1 = r1.view(-1, 3, 3)
     r1 = r1 - r1.transpose(1, 2)
     n = r1.data.shape[0]
-    R = Variable(torch.eye(3, 3).repeat(n, 1, 1)).float().cuda() + torch.mul(
+    R = torch.eye(3, 3).repeat(n, 1, 1).float().to(r.device) + torch.mul(
         torch.sin(theta).unsqueeze(1).repeat(1, 9).view(-1, 3, 3), r1) + torch.mul(
         (1 - torch.cos(theta).unsqueeze(1).repeat(1, 9).view(-1, 3, 3)), torch.matmul(r1, r1))
     return R
@@ -591,6 +591,29 @@ def expmap2xyz_torch_cmu(expmap):
     return xyz
 
 
+def read_sequence(subject, action, subaction, sample_rate, path_to_dataset):
+    print("Reading subject {0}, action {1}, subaction {2}".format(subject, action, subaction))
+
+    filename = '{0}/S{1}/{2}_{3}.txt'.format(path_to_dataset, subject, action, subaction)
+    sequence = readCSVasFloat(filename)
+
+    sampled_sequence = sequence[::sample_rate, :]
+    num_frames = len(sampled_sequence)
+
+    return sequence, num_frames
+
+
+def get_subsequence(sequence, num_frames, seq_len):
+    fs = np.arange(0, num_frames - seq_len + 1)
+    fs_sel = fs
+    for i in np.arange(seq_len - 1):
+        fs_sel = np.vstack((fs_sel, fs + i + 1))
+    fs_sel = fs_sel.transpose()
+    seq_sel = sequence[fs_sel, :]
+
+    return seq_sel
+
+
 def load_data(path_to_dataset, subjects, actions, sample_rate, seq_len, input_n=10, data_mean=None, data_std=None):
     """
     adapted from
@@ -607,67 +630,28 @@ def load_data(path_to_dataset, subjects, actions, sample_rate, seq_len, input_n=
     :param input_n: past frame length
     :return:
     """
-
-    sampled_seq = []
-    complete_seq = []
-    # actions_all = define_actions("all")
-    # one_hot_all = np.eye(len(actions_all))
+    sampled_seq, complete_seq = [], []
     for subj in subjects:
-        for action_idx in np.arange(len(actions)):
-            action = actions[action_idx]
-            if not (subj == 5):
-                for subact in [1, 2]:  # subactions
+        for action in actions:
+            sequence1, num_frames1 = read_sequence(subj, action, 1, sample_rate, path_to_dataset)
+            sequence2, num_frames2 = read_sequence(subj, action, 2, sample_rate, path_to_dataset)
 
-                    print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, subact))
-
-                    filename = '{0}/S{1}/{2}_{3}.txt'.format(path_to_dataset, subj, action, subact)
-                    action_sequence = readCSVasFloat(filename)
-                    n, d = action_sequence.shape
-                    even_list = range(0, n, sample_rate)
-                    the_sequence = np.array(action_sequence[even_list, :])
-                    num_frames = len(the_sequence)
-                    fs = np.arange(0, num_frames - seq_len + 1)
-                    fs_sel = fs
-                    for i in np.arange(seq_len - 1):
-                        fs_sel = np.vstack((fs_sel, fs + i + 1))
-                    fs_sel = fs_sel.transpose()
-                    seq_sel = the_sequence[fs_sel, :]
-                    if len(sampled_seq) == 0:
-                        sampled_seq = seq_sel
-                        complete_seq = the_sequence
-                    else:
-                        sampled_seq = np.concatenate((sampled_seq, seq_sel), axis=0)
-                        complete_seq = np.append(complete_seq, the_sequence, axis=0)
-            else:
-                print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 1))
-                filename = '{0}/S{1}/{2}_{3}.txt'.format(path_to_dataset, subj, action, 1)
-                action_sequence = readCSVasFloat(filename)
-                n, d = action_sequence.shape
-                even_list = range(0, n, sample_rate)
-                the_sequence1 = np.array(action_sequence[even_list, :])
-                num_frames1 = len(the_sequence1)
-
-                print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 2))
-                filename = '{0}/S{1}/{2}_{3}.txt'.format(path_to_dataset, subj, action, 2)
-                action_sequence = readCSVasFloat(filename)
-                n, d = action_sequence.shape
-                even_list = range(0, n, sample_rate)
-                the_sequence2 = np.array(action_sequence[even_list, :])
-                num_frames2 = len(the_sequence2)
-
+            if subj == 5:
                 fs_sel1, fs_sel2 = find_indices_srnn(num_frames1, num_frames2, seq_len, input_n=input_n)
-                seq_sel1 = the_sequence1[fs_sel1, :]
-                seq_sel2 = the_sequence2[fs_sel2, :]
-                if len(sampled_seq) == 0:
-                    sampled_seq = seq_sel1
-                    sampled_seq = np.concatenate((sampled_seq, seq_sel2), axis=0)
-                    complete_seq = the_sequence1
-                    complete_seq = np.append(complete_seq, the_sequence2, axis=0)
+                seq_sel1 = sequence1[fs_sel1, :]
+                seq_sel2 = sequence2[fs_sel2, :]
+            else:
+                seq_sel1 = get_subsequence(sequence1, num_frames1, seq_len)
+                seq_sel2 = get_subsequence(sequence2, num_frames2, seq_len)
 
-    # if is not testing or validation then get the data statistics
-    if not (subj == 5 and subj == 11):
-        data_std = np.std(complete_seq, axis=0)
-        data_mean = np.mean(complete_seq, axis=0)
+            sampled_seq.append(seq_sel1), sampled_seq.append(seq_sel2)
+            complete_seq.append(sequence1), complete_seq.append(sequence2)
+
+    sampled_seq = np.concatenate(sampled_seq, axis=0)
+    complete_seq = np.concatenate(complete_seq, axis=0)
+
+    data_std = np.std(complete_seq, axis=0)
+    data_mean = np.mean(complete_seq, axis=0)
 
     dimensions_to_ignore = []
     dimensions_to_use = []

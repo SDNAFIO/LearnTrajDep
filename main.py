@@ -254,8 +254,7 @@ def test(train_loader, model, input_n=20, output_n=50, dct_n=20, is_cuda=False, 
         idct_m = Variable(torch.from_numpy(idct_m)).float().cuda()
         outputs_t = outputs.view(-1, dct_n).transpose(0, 1)
         outputs_exp = torch.matmul(idct_m[:, :dct_n], outputs_t).transpose(0, 1).contiguous().view(-1, dim_used_len,
-                                                                                                   seq_len).transpose(1,
-                                                                                                                      2)
+                                                                                                   seq_len).transpose(1, 2)
 
         pred_expmap = all_seq.clone()
         dim_used = np.array(dim_used)
