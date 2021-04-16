@@ -4,7 +4,7 @@ from torch.autograd import Variable
 from utils import data_utils
 
 
-def sen_loss(outputs, all_seq, dim_used, dct_n):
+def sen_loss(outputs, all_seq, dim_used, dct_n, is_cuda):
     """
 
     :param outputs: N * (seq_len*dim_used_len)
@@ -18,7 +18,10 @@ def sen_loss(outputs, all_seq, dim_used, dct_n):
     dim_used = np.array(dim_used)
 
     _, idct_m = data_utils.get_dct_matrix(seq_len)
-    idct_m = Variable(torch.from_numpy(idct_m)).float().cuda()
+    if is_cuda:
+        idct_m = Variable(torch.from_numpy(idct_m)).float().cuda()
+    else:
+        idct_m = Variable(torch.from_numpy(idct_m)).float()
     outputs_t = outputs.view(-1, dct_n).transpose(0, 1)
     pred_expmap = torch.matmul(idct_m[:, :dct_n], outputs_t).transpose(0, 1).contiguous().view(-1, dim_used_len,
                                                                                                seq_len).transpose(1, 2)
@@ -28,7 +31,7 @@ def sen_loss(outputs, all_seq, dim_used, dct_n):
     return loss
 
 
-def euler_error(outputs, all_seq, input_n, dim_used, dct_n):
+def euler_error(outputs, all_seq, input_n, dim_used, dct_n, is_cuda):
     """
 
     :param outputs:
@@ -41,7 +44,10 @@ def euler_error(outputs, all_seq, input_n, dim_used, dct_n):
     dim_used_len = len(dim_used)
 
     _, idct_m = data_utils.get_dct_matrix(seq_len)
-    idct_m = Variable(torch.from_numpy(idct_m)).float().cuda()
+    if is_cuda:
+        idct_m = Variable(torch.from_numpy(idct_m)).float().cuda()
+    else:
+        idct_m = Variable(torch.from_numpy(idct_m)).float()
     outputs_t = outputs.view(-1, dct_n).transpose(0, 1)
     outputs_exp = torch.matmul(idct_m[:, :dct_n], outputs_t).transpose(0, 1).contiguous().view(-1, dim_used_len,
                                                                                                seq_len).transpose(1, 2)
@@ -57,17 +63,17 @@ def euler_error(outputs, all_seq, input_n, dim_used, dct_n):
     pred_expmap = pred_expmap.view(-1, 3)
     targ_expmap = targ_expmap.view(-1, 3)
 
-    pred_eul = data_utils.rotmat2euler_torch(data_utils.expmap2rotmat_torch(pred_expmap))
+    pred_eul = data_utils.rotmat2euler_torch(data_utils.expmap2rotmat_torch(pred_expmap), is_cuda)
     pred_eul = pred_eul.view(-1, dim_full_len)
 
-    targ_eul = data_utils.rotmat2euler_torch(data_utils.expmap2rotmat_torch(targ_expmap))
+    targ_eul = data_utils.rotmat2euler_torch(data_utils.expmap2rotmat_torch(targ_expmap), is_cuda)
     targ_eul = targ_eul.view(-1, dim_full_len)
     mean_errors = torch.mean(torch.norm(pred_eul - targ_eul, 2, 1))
 
     return mean_errors
 
 
-def mpjpe_error(outputs, all_seq, input_n, dim_used, dct_n):
+def mpjpe_error(outputs, all_seq, input_n, dim_used, dct_n, is_cuda):
     """
 
     :param outputs:
@@ -82,7 +88,10 @@ def mpjpe_error(outputs, all_seq, input_n, dim_used, dct_n):
     dim_used_len = len(dim_used)
 
     _, idct_m = data_utils.get_dct_matrix(seq_len)
-    idct_m = Variable(torch.from_numpy(idct_m)).float().cuda()
+    if is_cuda:
+        idct_m = Variable(torch.from_numpy(idct_m)).float().cuda()
+    else:
+        idct_m = Variable(torch.from_numpy(idct_m)).float()
     outputs_t = outputs.view(-1, dct_n).transpose(0, 1)
     outputs_exp = torch.matmul(idct_m[:, :dct_n], outputs_t).transpose(0, 1).contiguous().view(-1, dim_used_len,
                                                                                                seq_len).transpose(1, 2)

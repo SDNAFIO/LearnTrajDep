@@ -1,14 +1,15 @@
 from torch.utils.data import Dataset
 import numpy as np
-import data_utils
 import matplotlib.pyplot as plt
-import viz
-import forward_kinematics as fk
+import utils.forward_kinematics as fk
 import torch
+import utils.data_utils as data_utils
+import os
+import pickle as pkl
 
 
 class H36motion(Dataset):
-    def __init__(self, path_to_data, actions, input_n=10, output_n=10, dct_n=20, split=0, sample_rate=2, use_dct=False, train_3d=False):
+    def __init__(self, path_to_data, actions, input_n=10, output_n=10, dct_n=20, split=0, sample_rate=2, use_dct=True, train_3d=False):
         """
         read h36m data to get the dct coefficients.
         :param path_to_data:
@@ -21,6 +22,7 @@ class H36motion(Dataset):
         :param data_mean: mean of expmap
         :param data_std: standard deviation of expmap
         """
+        print('NOTE THAT WE HAVE REMOVED DATA MEAN AND DATA STD')
         self.dct_n = dct_n
         self.input_n = input_n
         self.output_n = output_n
@@ -33,7 +35,8 @@ class H36motion(Dataset):
         acts = data_utils.define_actions(actions)
 
         subjs = subs[split]
-        self.sequences_expmap, self.sequences_3d = self.load_data(subjs, acts, sample_rate, input_n + output_n, input_n=input_n)
+        self.sequences_expmap, self.sequences_3d, self.all_seqs = self.load_data(subjs, acts, sample_rate, input_n + output_n, input_n=input_n)
+        self.all_seqs = np.concatenate(self.all_seqs, 0)
 
         self.reduced_seqs_expmap = self.sequences_expmap[:,:,self.dimensions_to_use]
         self.reduced_seqs_3d = self.sequences_3d[:,:,self.dimensions_to_use_3d]
@@ -127,27 +130,33 @@ class H36motion(Dataset):
         :param input_n: past frame length
         :return:
         """
-        sampled_seq, complete_seq = [], []
-        for subj in subjects:
-            for action in actions:
-                sequence1, num_frames1 = self.read_sequence(subj, action, 1, sample_rate)
-                sequence2, num_frames2 = self.read_sequence(subj, action, 2, sample_rate)
+        cache_name = os.path.join(self.path_to_data, '_'.join(['learn_traj3', str(subjects), str(actions), str(sample_rate), str(seq_len), str(input_n)]) + '.pkl')
 
-                if subj == 5:
-                    # subject 5 is the testing subject, we use a specific scheme to extract the frame idxs
-                    # such that they are the same as in related work
-                    fs_sel1, fs_sel2 = self.find_indices_srnn(num_frames1, num_frames2, seq_len, input_n=input_n)
-                    seq_sel1 = sequence1[fs_sel1, :]
-                    seq_sel2 = sequence2[fs_sel2, :]
-                else:
-                    seq_sel1 = self.get_subsequence(sequence1, num_frames1, seq_len)
-                    seq_sel2 = self.get_subsequence(sequence2, num_frames2, seq_len)
+        if os.path.isfile(cache_name):
+            print('loading data from cache: {}'.format(cache_name))
+            sequences_expmap, sequences_3d, complete_seq, sampled_seq = pkl.load(open(cache_name, 'rb'))
+        else:
+            sampled_seq, complete_seq = [], []
+            for subj in subjects:
+                for action in actions:
+                    sequence1, num_frames1 = self.read_sequence(subj, action, 1, sample_rate)
+                    sequence2, num_frames2 = self.read_sequence(subj, action, 2, sample_rate)
 
-                sampled_seq.append(seq_sel1), sampled_seq.append(seq_sel2)
-                complete_seq.append(sequence1), complete_seq.append(sequence2)
+                    if subj == 5:
+                        # subject 5 is the testing subject, we use a specific scheme to extract the frame idxs
+                        # such that they are the same as in related work
+                        fs_sel1, fs_sel2 = self.find_indices_srnn(num_frames1, num_frames2, seq_len, input_n=input_n)
+                        seq_sel1 = sequence1[fs_sel1, :]
+                        seq_sel2 = sequence2[fs_sel2, :]
+                    else:
+                        seq_sel1 = self.get_subsequence(sequence1, num_frames1, seq_len)
+                        seq_sel2 = self.get_subsequence(sequence2, num_frames2, seq_len)
 
-        sequences_expmap = np.concatenate(sampled_seq, axis=0)
-        complete_seq = np.concatenate(complete_seq, axis=0)
+                    sampled_seq.append(seq_sel1), sampled_seq.append(seq_sel2)
+                    complete_seq.append(sequence1), complete_seq.append(sequence2)
+
+            sequences_expmap = np.concatenate(sampled_seq, axis=0)
+            complete_seq = np.concatenate(complete_seq, axis=0)
 
         zeroed = sequences_expmap.copy()
         zeroed[:, :, 0:6] = 0
@@ -168,7 +177,10 @@ class H36motion(Dataset):
         self.dimensions_to_ignore_3d = np.concatenate((joint_to_ignore_3d * 3, joint_to_ignore_3d * 3 + 1, joint_to_ignore_3d * 3 + 2))
         self.dimensions_to_use_3d = np.setdiff1d(np.arange(sequences_3d.shape[-1]), self.dimensions_to_ignore_3d)
 
-        return sequences_expmap, sequences_3d
+        print('Saving data to cache: {}...'.format(cache_name))
+        pkl.dump([sequences_expmap, sequences_3d, complete_seq, sampled_seq], open(cache_name, 'wb'))
+
+        return sequences_expmap, sequences_3d, sampled_seq
 
     @staticmethod
     def expmap2xyz(expmap):
@@ -191,13 +203,10 @@ class H36motion(Dataset):
         return xyz
 
     def __len__(self):
-        return np.shape(self.sequences_expmap)[0]
+        return np.shape(self.input_dct_seq)[0]
 
     def __getitem__(self, item):
-        if self.train_3d:
-            return self.reduced_seqs_3d[item], self.sequences_3d[item]
-        else:
-            return self.reduced_seqs_expmap[item], self.sequences_expmap[item]
+        return self.input_dct_seq[item], self.output_dct_seq[item], self.all_seqs[item]
 
 def test_visualization():
     from torch.utils.data import DataLoader

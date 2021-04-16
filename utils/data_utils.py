@@ -5,7 +5,7 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import torch
 from torch.autograd.variable import Variable
 import os
-import forward_kinematics
+import utils.forward_kinematics as forward_kinematics
 
 
 def rotmat2euler(R):
@@ -464,7 +464,7 @@ def load_data_cmu_3d(path_to_dataset, actions, input_n, output_n, data_std=0, da
     return sampled_seq, dimensions_to_ignore, dimensions_to_use, data_mean, data_std
 
 
-def rotmat2euler_torch(R):
+def rotmat2euler_torch(R, is_cuda):
     """
     Converts a rotation matrix to euler angles
     batch pytorch version ported from the corresponding numpy method above
@@ -473,12 +473,18 @@ def rotmat2euler_torch(R):
     :return: N*3
     """
     n = R.data.shape[0]
-    eul = Variable(torch.zeros(n, 3).float()).cuda()
+    if is_cuda:
+        eul = Variable(torch.zeros(n, 3).float()).cuda()
+    else:
+        eul = Variable(torch.zeros(n, 3).float())
     idx_spec1 = (R[:, 0, 2] == 1).nonzero().cpu().data.numpy().reshape(-1).tolist()
     idx_spec2 = (R[:, 0, 2] == -1).nonzero().cpu().data.numpy().reshape(-1).tolist()
     if len(idx_spec1) > 0:
         R_spec1 = R[idx_spec1, :, :]
-        eul_spec1 = Variable(torch.zeros(len(idx_spec1), 3).float()).cuda()
+        if is_cuda:
+            eul_spec1 = Variable(torch.zeros(len(idx_spec1), 3).float()).cuda()
+        else:
+            eul_spec1 = Variable(torch.zeros(len(idx_spec1), 3).float())
         eul_spec1[:, 2] = 0
         eul_spec1[:, 1] = -np.pi / 2
         delta = torch.atan2(R_spec1[:, 0, 1], R_spec1[:, 0, 2])
@@ -487,7 +493,10 @@ def rotmat2euler_torch(R):
 
     if len(idx_spec2) > 0:
         R_spec2 = R[idx_spec2, :, :]
-        eul_spec2 = Variable(torch.zeros(len(idx_spec2), 3).float()).cuda()
+        if is_cuda:
+            eul_spec2 = Variable(torch.zeros(len(idx_spec2), 3).float()).cuda()
+        else:
+            eul_spec2 = Variable(torch.zeros(len(idx_spec2), 3).float())
         eul_spec2[:, 2] = 0
         eul_spec2[:, 1] = np.pi / 2
         delta = torch.atan2(R_spec2[:, 0, 1], R_spec2[:, 0, 2])
@@ -498,7 +507,10 @@ def rotmat2euler_torch(R):
     idx_remain = np.setdiff1d(np.setdiff1d(idx_remain, idx_spec1), idx_spec2).tolist()
     if len(idx_remain) > 0:
         R_remain = R[idx_remain, :, :]
-        eul_remain = Variable(torch.zeros(len(idx_remain), 3).float()).cuda()
+        if is_cuda:
+            eul_remain = Variable(torch.zeros(len(idx_remain), 3).float()).cuda()
+        else:
+            eul_remain = Variable(torch.zeros(len(idx_remain), 3).float())
         eul_remain[:, 1] = -torch.asin(R_remain[:, 0, 2])
         eul_remain[:, 0] = torch.atan2(R_remain[:, 1, 2] / torch.cos(eul_remain[:, 1]),
                                        R_remain[:, 2, 2] / torch.cos(eul_remain[:, 1]))

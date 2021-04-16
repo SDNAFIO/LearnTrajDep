@@ -8,8 +8,8 @@ import numpy as np
 import h5py
 import os
 from mpl_toolkits.mplot3d import Axes3D
-import forward_kinematics as fk
-from h36motion import H36motion
+import utils.forward_kinematics as fk
+from utils.h36motion import H36motion
 
 
 class Ax3DPose(object):
